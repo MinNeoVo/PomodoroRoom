@@ -140,6 +140,11 @@ function handleMessage(socket, msg) {
   const meta = clients.get(socket);
   if (!meta) return;
 
+  if (msg.type === 'ping') {
+    sendWs(socket, { type: 'pong', ts: Date.now() });
+    return;
+  }
+
   if (msg.type === 'list_rooms') {
     sendWs(socket, { type: 'room_list', rooms: getRoomList() });
     return;
@@ -418,6 +423,11 @@ server.on('upgrade', (req, socket) => {
         socket.end();
         return;
       }
+      if (opcode === 0x9) {
+        // Respond to RFC 6455 WebSocket Ping with Pong
+        try { socket.write(Buffer.from([0x8a, 0x00])); } catch (_) {}
+        continue;
+      }
       if (opcode === 0x1) {
         try {
           handleMessage(socket, JSON.parse(payload.toString('utf8')));
@@ -439,6 +449,13 @@ server.on('upgrade', (req, socket) => {
     clients.delete(socket);
   });
 });
+
+// Keepalive ping every 25s so Render/Railway reverse proxies never drop idle study rooms!
+setInterval(() => {
+  for (const sock of clients.keys()) {
+    sendWs(sock, { type: 'ping', ts: Date.now() });
+  }
+}, 25000);
 
 server.listen(PORT, () => {
   console.log(`Cozy Garden Co-Working Server running at http://localhost:${PORT}`);

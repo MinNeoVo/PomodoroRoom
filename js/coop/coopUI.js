@@ -44,6 +44,13 @@
               this._refreshMemberSpeakingClasses();
             },
             onDevicesChange: (mics, selectedId) => this._renderMicList(mics, selectedId),
+            onPeerStatusChange: (connected, total) => {
+              this.voicePeerConnected = connected;
+              this.voicePeerTotal = total;
+              if (this.voice) {
+                this._updateVoiceButtons({ active: this.voice.active, muted: this.voice.muted });
+              }
+            },
             onError: (msg) => this._appendChat('', `⚠️ ${msg}`, true),
           })
         : null;
@@ -330,11 +337,14 @@
         this.btnVoiceDeafen.textContent = deafened ? '🔕 Tắt Loa' : '🔈 Loa Bật';
       }
       if (this.voiceStatus) {
-        this.voiceStatus.textContent = !active
-          ? 'Thoại: Tắt'
-          : muted
-            ? 'Mic đang tắt'
-            : 'Đang mở Mic';
+        if (!active) {
+          this.voiceStatus.textContent = 'Thoại: Tắt';
+        } else {
+          const conn = this.voicePeerConnected || 0;
+          const tot = this.voicePeerTotal || 0;
+          const netTxt = tot === 0 ? 'Chờ bạn vào thoại' : conn > 0 ? `Đã nối (${conn}/${tot})` : 'Đang kết nối...';
+          this.voiceStatus.textContent = muted ? `Tắt Mic • ${netTxt}` : netTxt;
+        }
       }
     }
 

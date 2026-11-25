@@ -7,9 +7,26 @@
 (function () {
   const CozyGarden = (window.CozyGarden = window.CozyGarden || {});
 
+  // Public STUN + Free OpenRelay TURN servers so peers behind strict 4G/symmetric NAT can hear & talk!
   const ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ];
 
   class VoiceChat {
@@ -19,6 +36,7 @@
       this.onVoiceStateChange = options.onVoiceStateChange || (() => {});
       this.onSpeakingChange = options.onSpeakingChange || (() => {});
       this.onDevicesChange = options.onDevicesChange || (() => {});
+      this.onPeerStatusChange = options.onPeerStatusChange || (() => {});
       this.onError = options.onError || (() => {});
 
       this.active = false;
@@ -152,6 +170,7 @@
       this.localAnalyser = null;
       this.speakingIds.clear();
       this.onSpeakingChange(new Set());
+      this.onPeerStatusChange(0, 0);
       this.onVoiceStateChange({ active: false, muted: false });
     }
 
@@ -184,55 +203,90 @@
 
       if (signal.kind === 'leave') {
         this._closePeer(senderId);
+        this._emitPeerStatus();
         return;
       }
 
       if (!this.active) return;
 
       const myId = this.getMyId();
-      if (signal.kind === 'join') {
-        this.sendSignal(senderId, { kind: 'ready' });
-        if (myId && myId < senderId) {
-          await this._createOffer(senderId);
+      try {
+        if (signal.kind === 'join') {
+          this.sendSignal(senderId, { kind: 'ready' });
+          if (myId && myId < senderId) {
+            await this._createOffer(senderId);
+          }
+          return;
         }
-        return;
-      }
 
-      if (signal.kind === 'ready') {
-        if (myId && myId < senderId) {
-          await this._createOffer(senderId);
+        if (signal.kind === 'ready') {
+          if (myId && myId < senderId) {
+            await this._createOffer(senderId);
+          }
+          return;
         }
-        return;
-      }
 
-      if (signal.kind === 'offer') {
-        const entry = this._getOrCreatePeer(senderId);
-        await entry.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-        await this._flushCandidates(entry);
-        const answer = await entry.pc.createAnswer();
-        await entry.pc.setLocalDescription(answer);
-        this.sendSignal(senderId, { kind: 'answer', sdp: entry.pc.localDescription });
-        return;
-      }
-
-      if (signal.kind === 'answer') {
-        const entry = this.peers.get(senderId);
-        if (!entry) return;
-        await entry.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-        await this._flushCandidates(entry);
-        return;
-      }
-
-      if (signal.kind === 'ice' && signal.candidate) {
-        const entry = this._getOrCreatePeer(senderId);
-        const cand = new RTCIceCandidate(signal.candidate);
-        if (entry.pc.remoteDescription && entry.pc.remoteDescription.type) {
-          try {
-            await entry.pc.addIceCandidate(cand);
-          } catch (_) {}
-        } else {
-          entry.pendingCandidates.push(cand);
+        if (signal.kind === 'offer') {
+          const entry = this._getOrCreatePeer(senderId);
+          const polite = myId > senderId;
+          if (entry.pc.signalingState !== 'stable') {
+            if (!polite) return; // Impolite peer ignores colliding offer
+            await entry.pc.setLocalDescription({ type: 'rollback' });
+          }
+          await entry.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          await this._flushCandidates(entry);
+          const answer = await entry.pc.createAnswer();
+          await entry.pc.setLocalDescription(answer);
+          this.sendSignal(senderId, { kind: 'answer', sdp: entry.pc.localDescription });
+          return;
         }
+
+        if (signal.kind === 'answer') {
+          const entry = this.peers.get(senderId);
+          if (!entry || entry.pc.signalingState !== 'have-local-offer') return;
+          await entry.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          await this._flushCandidates(entry);
+          return;
+        }
+
+        if (signal.kind === 'ice' && signal.candidate) {
+          const entry = this._getOrCreatePeer(senderId);
+          const cand = new RTCIceCandidate(signal.candidate);
+          if (entry.pc.remoteDescription && entry.pc.remoteDescription.type) {
+            try {
+              await entry.pc.addIceCandidate(cand);
+            } catch (_) {}
+          } else {
+            entry.pendingCandidates.push(cand);
+          }
+        }
+      } catch (err) {
+        // Keep voice loop alive even if one transient signaling race occurs
+        console.warn('Voice signal error:', err);
+      }
+    }
+
+    _emitPeerStatus() {
+      let connected = 0;
+      for (const entry of this.peers.values()) {
+        const s = entry.pc.iceConnectionState;
+        if (s === 'connected' || s === 'completed') connected++;
+      }
+      this.onPeerStatusChange(connected, this.peers.size);
+    }
+
+    _playAudioElement(audioEl) {
+      if (!audioEl) return;
+      const p = audioEl.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          // Browser autoplay blocked async remote audio — unlock on next user tap!
+          const unlock = () => {
+            audioEl.play().catch(() => {});
+          };
+          window.addEventListener('pointerdown', unlock, { once: true });
+          window.addEventListener('keydown', unlock, { once: true });
+        });
       }
     }
 
@@ -245,6 +299,7 @@
         pendingCandidates: [],
         audioEl: null,
         analyser: null,
+        retriedIce: false,
       };
       this.peers.set(peerId, entry);
 
@@ -264,6 +319,7 @@
           const audioEl = document.createElement('audio');
           audioEl.autoplay = true;
           audioEl.playsInline = true;
+          audioEl.volume = 1.0;
           audioEl.muted = this.deafened;
           audioEl.srcObject = stream;
           audioEl.style.display = 'none';
@@ -272,15 +328,28 @@
         } else {
           entry.audioEl.srcObject = stream;
         }
+        this._playAudioElement(entry.audioEl);
         entry.analyser = this._attachAnalyser(stream);
       };
 
+      pc.oniceconnectionstatechange = () => {
+        this._emitPeerStatus();
+        if (pc.iceConnectionState === 'failed' && !entry.retriedIce) {
+          entry.retriedIce = true;
+          if (typeof pc.restartIce === 'function') {
+            try { pc.restartIce(); } catch (_) {}
+          }
+        }
+      };
+
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        this._emitPeerStatus();
+        if (pc.connectionState === 'closed') {
           this._closePeer(peerId);
         }
       };
 
+      this._emitPeerStatus();
       return entry;
     }
 

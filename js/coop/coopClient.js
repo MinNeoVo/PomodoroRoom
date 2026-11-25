@@ -16,6 +16,10 @@
       this.ws = null;
       this.channel = null;
       this.currentRoom = null;
+      this.lastJoinPayload = null;
+      this.heartbeatTimer = null;
+      this.reconnectTimer = null;
+      this.reconnectAttempts = 0;
 
       this._initTransport();
     }
@@ -23,29 +27,90 @@
     _initTransport() {
       const isHttp = window.location.protocol === 'http:' || window.location.protocol === 'https:';
       if (isHttp && window.WebSocket) {
-        const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        try {
-          this.ws = new WebSocket(`${wsProto}//${window.location.host}`);
-          this.ws.addEventListener('open', () => {
-            this.mode = 'ws';
-            this.requestRoomList();
-          });
-          this.ws.addEventListener('message', (e) => {
-            try {
-              const msg = JSON.parse(e.data);
-              if (msg.type === 'welcome') {
-                this.clientId = msg.id;
-                if (this.handlers.onRoomList) this.handlers.onRoomList(msg.rooms || []);
-              } else {
-                this._dispatch(msg);
-              }
-            } catch (_) {}
-          });
-          this.ws.addEventListener('error', () => this._fallbackToLocal());
-          return;
-        } catch (_) {}
+        this._connectWs();
+        return;
       }
       this._fallbackToLocal();
+    }
+
+    _connectWs() {
+      const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      try {
+        this.ws = new WebSocket(`${wsProto}//${window.location.host}`);
+        this.ws.addEventListener('open', () => {
+          this.mode = 'ws';
+          const wasReconnect = this.reconnectAttempts > 0;
+          this.reconnectAttempts = 0;
+          this._startHeartbeat();
+          this.requestRoomList();
+          if (wasReconnect && this.lastJoinPayload) {
+            if (this.handlers.onSystem) this.handlers.onSystem('✓ Đã kết nối lại máy chủ, đang vào lại phòng...');
+            const p = this.lastJoinPayload;
+            this.ws.send(JSON.stringify({
+              type: 'join_room',
+              code: p.code,
+              name: p.name,
+              outfit: p.outfit,
+              avatar: p.avatar,
+              goal: p.goal,
+            }));
+          }
+        });
+        this.ws.addEventListener('message', (e) => {
+          try {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'ping') {
+              if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify({ type: 'pong' }));
+              return;
+            }
+            if (msg.type === 'pong') return;
+            if (msg.type === 'welcome') {
+              this.clientId = msg.id;
+              if (this.handlers.onRoomList) this.handlers.onRoomList(msg.rooms || []);
+            } else {
+              this._dispatch(msg);
+            }
+          } catch (_) {}
+        });
+        this.ws.addEventListener('close', () => {
+          this._stopHeartbeat();
+          this._scheduleReconnect();
+        });
+        this.ws.addEventListener('error', () => {
+          // Close event will handle automatic reconnect — NEVER fall back to a ghost local room on http(s)!
+        });
+      } catch (_) {
+        this._scheduleReconnect();
+      }
+    }
+
+    _startHeartbeat() {
+      this._stopHeartbeat();
+      this.heartbeatTimer = setInterval(() => {
+        if (this.ws && this.ws.readyState === 1) {
+          this.ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 20000);
+    }
+
+    _stopHeartbeat() {
+      if (this.heartbeatTimer) {
+        clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
+      }
+    }
+
+    _scheduleReconnect() {
+      if (this.reconnectTimer) return;
+      this.reconnectAttempts++;
+      if (this.currentRoom && this.reconnectAttempts === 1 && this.handlers.onSystem) {
+        this.handlers.onSystem('⚠️ Mất kết nối tạm thời, đang tự kết nối lại phòng...');
+      }
+      const delay = Math.min(5000, 1500 * this.reconnectAttempts);
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
+        this._connectWs();
+      }, delay);
     }
 
     _fallbackToLocal() {
@@ -148,6 +213,7 @@
 
     createRoom({ code, sceneId, name, outfit, avatar, goal }) {
       const cleanCode = (code || this.generateCode()).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+      this.lastJoinPayload = { code: cleanCode, sceneId, name, outfit, avatar, goal };
       if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
         this.ws.send(JSON.stringify({ type: 'create_room', code: cleanCode, sceneId, name, outfit, avatar, goal }));
         return;
@@ -173,6 +239,7 @@
     joinRoom({ code, name, outfit, avatar, goal }) {
       const cleanCode = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
       if (!cleanCode) return;
+      this.lastJoinPayload = { code: cleanCode, name, outfit, avatar, goal };
       if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
         this.ws.send(JSON.stringify({ type: 'join_room', code: cleanCode, name, outfit, avatar, goal }));
         return;
@@ -202,6 +269,7 @@
     }
 
     leaveRoom() {
+      this.lastJoinPayload = null;
       if (!this.currentRoom) return;
       const code = this.currentRoom.code;
       if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
