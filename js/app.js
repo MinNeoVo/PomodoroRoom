@@ -22,10 +22,6 @@
   const tooltip = document.getElementById('hoverTooltip');
   const audioBanner = document.getElementById('audioBanner');
 
-  const skyClockPill = document.getElementById('skyClockPill');
-  const skyClockMode = document.getElementById('skyClockMode');
-  const skyClockTime = document.getElementById('skyClockTime');
-
   const btnWeatherToggle = document.getElementById('btnWeatherToggle');
   const weatherIcon = document.getElementById('weatherIcon');
   const weatherBtnLabel = document.getElementById('weatherBtnLabel');
@@ -417,9 +413,6 @@
   function updatePomodoroUI() {
     const formatted = formatTime(pomoRemaining);
     pomoTimeEl.textContent = formatted;
-    skyClockTime.textContent = formatted;
-    skyClockMode.textContent = MODE_BADGES[pomoMode] || 'TẬP TRUNG';
-    skyClockPill.classList.toggle('running', pomoRunning);
 
     const total = customTotalSec || MODES[pomoMode];
     pomoProgressEl.style.width = `${(((total - pomoRemaining) / total) * 100).toFixed(1)}%`;
@@ -509,7 +502,6 @@
   }
 
   btnPomoStart.addEventListener('click', togglePomodoro);
-  skyClockPill.addEventListener('click', () => { highlightCard(pomodoroCard); togglePomodoro(); });
   btnPomoReset.addEventListener('click', () => {
     stopPomodoro();
     microPrompt.classList.add('hidden');
