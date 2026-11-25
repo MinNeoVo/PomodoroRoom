@@ -62,6 +62,7 @@ function serializeRoom(room) {
     code: room.code,
     sceneId: room.sceneId,
     level: room.level || 0,
+    hostId: room.hostId || null,
     members: Array.from(room.members.values()).map((m) => ({
       id: m.id,
       name: m.name,
@@ -118,6 +119,16 @@ function leaveCurrentRoom(socket) {
         broadcastRoom(room.code, { type: 'voice_signal', senderId: meta.id, signal: { kind: 'leave' } });
         broadcastRoom(room.code, { type: 'system', text: `${member.name} đã rời phòng.` });
       }
+      // If Host left, randomly transfer Host role to one of the remaining members!
+      if (room.hostId === meta.id) {
+        const remaining = Array.from(room.members.values());
+        const nextHost = remaining[Math.floor(Math.random() * remaining.length)];
+        room.hostId = nextHost.id;
+        broadcastRoom(room.code, {
+          type: 'system',
+          text: `👑 Quyền trưởng phòng đã tự động chuyển cho ${nextHost.name}!`,
+        });
+      }
       broadcastRoom(room.code, { type: 'room_state', room: serializeRoom(room) });
     }
   }
@@ -142,7 +153,14 @@ function handleMessage(socket, msg) {
     let room = rooms.get(code);
     if (msg.type === 'create_room') {
       if (!room) {
-        room = { code, sceneId: msg.sceneId || 'coop_library', level: 0, members: new Map(), vote: null };
+        room = {
+          code,
+          sceneId: msg.sceneId || 'coop_library',
+          level: 0,
+          hostId: meta.id,
+          members: new Map(),
+          vote: null,
+        };
         rooms.set(code, room);
       }
     } else if (!room) {
@@ -245,6 +263,42 @@ function handleMessage(socket, msg) {
         if (m.id !== sender.id) sendWs(m.socket, packet);
       }
     }
+  } else if (msg.type === 'room_alert') {
+    const text = String(msg.text || 'có chuyện muốn nói!').trim().slice(0, 80);
+    broadcastRoom(room.code, {
+      type: 'room_alert',
+      senderId: sender.id,
+      senderName: sender.name,
+      text,
+    });
+  } else if (msg.type === 'peer_interact') {
+    const target = room.members.get(msg.targetId);
+    if (!target || target.id === sender.id) return;
+    const action = ['bonk', 'hug', 'poke'].includes(msg.action) ? msg.action : 'bonk';
+    broadcastRoom(room.code, {
+      type: 'peer_interact',
+      senderId: sender.id,
+      senderName: sender.name,
+      targetId: target.id,
+      targetName: target.name,
+      action,
+    });
+  } else if (msg.type === 'transfer_host') {
+    if (room.hostId !== sender.id) return;
+    const target = room.members.get(msg.targetId);
+    if (!target || target.id === sender.id) return;
+    room.hostId = target.id;
+    broadcastRoom(room.code, {
+      type: 'system',
+      text: `👑 ${sender.name} đã nhượng quyền trưởng phòng cho ${target.name}!`,
+    });
+    broadcastRoom(room.code, { type: 'room_state', room: serializeRoom(room) });
+  } else if (msg.type === 'pomo_force_mode') {
+    if (room.hostId !== sender.id) return;
+    const mode = ['micro', 'focus', 'break'].includes(msg.mode) ? msg.mode : 'break';
+    room.vote = null;
+    broadcastRoom(room.code, { type: 'pomo_approved', mode, forcedBy: sender.name });
+    broadcastRoom(room.code, { type: 'room_state', room: serializeRoom(room) });
   } else if (msg.type === 'pomo_vote_start') {
     const mode = ['micro', 'focus', 'break'].includes(msg.mode) ? msg.mode : 'focus';
     room.vote = {

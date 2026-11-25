@@ -177,6 +177,7 @@
       this._buildBreakProps();
 
       this.emote = 'idle';
+      this.actionAnim = null; // { kind: 'bonk'|'bonked'|'hug'|'poke', t: 0, dur: 1.0 }
       this.walkPhase = 0;
       this.isWalking = false;
       this.walkTarget = null;
@@ -705,6 +706,10 @@
       });
     }
 
+    triggerAction(kind) {
+      this.actionAnim = { kind: kind || 'bonk', t: 0, dur: 0.95 };
+    }
+
     setWalkTarget(x, z) {
       const cx = Math.max(-2.6, Math.min(2.6, x));
       const cz = Math.max(-2.1, Math.min(2.3, z));
@@ -889,6 +894,43 @@
 
     update(dt, time, pomoMode, breakActivity, leftDown, rightDown, sipLift) {
       this.ahoge.rotation.z = Math.sin(time * 3.0) * 0.08;
+
+      // Transient playful interaction animation (bonk / bonked / hug / poke)
+      if (this.actionAnim) {
+        this.actionAnim.t += dt;
+        const p = Math.min(1, this.actionAnim.t / this.actionAnim.dur);
+        const wave = Math.sin(p * Math.PI);
+        const fast = Math.sin(p * Math.PI * 3);
+        const k = this.actionAnim.kind;
+        if (k === 'bonk') {
+          this.bodyPivot.position.y = wave * 0.08;
+          this.upperBody.rotation.set(-0.22 * wave, 0.35 * fast, 0);
+          this.arms.right.shoulder.rotation.set(1.65 * wave, 0, -0.2);
+          this.arms.right.elbow.rotation.set(0.35, 0, 0);
+        } else if (k === 'bonked') {
+          this.bodyPivot.position.y = wave * 0.14;
+          this.upperBody.rotation.set(0.28 * wave, 0, 0.25 * fast);
+          this.headGroup.rotation.set(0.22 * wave, 0, -0.28 * fast);
+          this.arms.left.shoulder.rotation.set(0.4, 0, -1.6 * wave);
+          this.arms.right.shoulder.rotation.set(0.4, 0, 1.6 * wave);
+        } else if (k === 'hug') {
+          this.bodyPivot.position.y = wave * 0.06;
+          this.upperBody.rotation.set(-0.12 * wave, 0, 0.1 * fast);
+          this.arms.left.shoulder.rotation.set(1.1 * wave, 0, -0.55 * wave);
+          this.arms.right.shoulder.rotation.set(1.1 * wave, 0, 0.55 * wave);
+        } else {
+          this.upperBody.rotation.set(-0.15 * wave, 0, 0);
+          this.arms.right.shoulder.rotation.set(1.45 * wave, 0, -0.1);
+          this.arms.right.elbow.rotation.set(0.25, 0, 0);
+        }
+        if (p >= 1) {
+          this.actionAnim = null;
+          this.bodyPivot.position.y = 0;
+          this.upperBody.rotation.set(0, 0, 0);
+          this.headGroup.rotation.set(0, 0, 0);
+        }
+        return;
+      }
 
       if (pomoMode !== 'break') {
         this.bodyPivot.position.y = 0;

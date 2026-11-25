@@ -266,14 +266,15 @@
       const bp = active.getBottlePosition();
       this.bottle.setBasePosition(bp.x, bp.y, bp.z);
       this.setIslandLevel(this.islandLevel);
-      this.setPomoMode(this.pomoMode);
+      this.setPomoMode(this.pomoMode, true);
     }
 
-    enterCoopScene(coopSceneId, members, myId) {
+    enterCoopScene(coopSceneId, members, myId, hostId) {
       const t = CozyGarden.COOP_SCENES[coopSceneId] || CozyGarden.COOP_SCENES.coop_library;
       this.coopSceneId = t.id;
       this.coopMembers = members || [];
       this.myCoopId = myId;
+      this.coopHostId = hostId || null;
 
       // Hide solo dioramas & show 4-seat co-working diorama
       this.sakuraWorld.setVisible(false);
@@ -293,19 +294,31 @@
       this.sunLight.position.set(...t.sunPos);
       this.ambientMat.color.setHex(t.particleColor);
 
-      this.coopDiorama.syncMembers(this.coopMembers, this.myCoopId, this.character, this.pomoMode, this.breakActivity);
+      this.coopDiorama.lastSyncedMode = null;
+      this.coopDiorama.syncMembers(this.coopMembers, this.myCoopId, this.character, this.pomoMode, this.breakActivity, this.coopHostId);
     }
 
-    updateCoopMembers(members, myId) {
+    updateCoopMembers(members, myId, hostId) {
       this.coopMembers = members || [];
       this.myCoopId = myId;
+      if (hostId !== undefined) this.coopHostId = hostId;
       if (this.coopSceneId) {
-        this.coopDiorama.syncMembers(this.coopMembers, this.myCoopId, this.character, this.pomoMode, this.breakActivity);
+        this.coopDiorama.syncMembers(this.coopMembers, this.myCoopId, this.character, this.pomoMode, this.breakActivity, this.coopHostId);
       }
     }
 
     showCoopReaction(senderId, emoji) {
       if (this.coopSceneId) this.coopDiorama.spawnReaction(senderId, emoji);
+    }
+
+    showCoopChatBubble(senderId, text) {
+      if (this.coopSceneId) this.coopDiorama.spawnChatBubble(senderId, text);
+    }
+
+    triggerCoopInteraction(senderId, targetId, action) {
+      if (this.coopSceneId) {
+        this.coopDiorama.triggerPeerInteraction(senderId, targetId, action, this.myCoopId, this.character);
+      }
     }
 
     setCoopRoomLevel(level) {
@@ -335,7 +348,8 @@
       this.sakuraWorld.updateClockTexture(text, this.pomoMode, isRunning, 'anime');
     }
 
-    setPomoMode(mode) {
+    setPomoMode(mode, force = false) {
+      if (!force && this.pomoMode === mode) return;
       this.pomoMode = mode;
       if (this.breakAuraPoints) this.breakAuraPoints.visible = mode === 'break';
       if (mode !== 'break') {
@@ -343,7 +357,7 @@
         this.character.clearWalkTarget();
       }
       if (this.coopSceneId) {
-        this.coopDiorama.syncMembers(this.coopMembers, this.myCoopId, this.character, mode, this.breakActivity);
+        this.coopDiorama.syncMembers(this.coopMembers, this.myCoopId, this.character, mode, this.breakActivity, this.coopHostId);
         return;
       }
       const open = mode !== 'break';
@@ -677,11 +691,13 @@
 
       // Break mode click-to-move walking + live sync to coop peers
       if (this.pomoMode === 'break') {
+        const wasWalking = this.character.isWalking;
         const moved = this.character.stepTowardTarget(dt, this.time);
-        if (moved && this.coopSceneId) {
+        if ((moved || wasWalking) && this.coopSceneId) {
           const p = this.character.group.position;
           this.coopDiorama.updateMyNameplate(this.myCoopId, p);
-          if (this.time - this.lastMoveSync > 0.14 && this.callbacks.onLocalMoveEmote) {
+          const finished = wasWalking && !moved;
+          if ((finished || this.time - this.lastMoveSync > 0.14) && this.callbacks.onLocalMoveEmote) {
             this.lastMoveSync = this.time;
             this.callbacks.onLocalMoveEmote(
               { x: p.x, y: p.y, z: p.z, rotY: this.character.group.rotation.y },

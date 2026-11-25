@@ -511,7 +511,18 @@
   });
   btnModeMicro.addEventListener('click', () => setPomoMode('micro'));
   btnModeFocus.addEventListener('click', () => setPomoMode('focus'));
-  btnModeBreak.addEventListener('click', () => setPomoMode('break'));
+  btnModeBreak.addEventListener('click', () => {
+    if (coopUI && coopUI.isInRoom() && coopUI.needsPomodoroVote()) {
+      ensureAudioStarted();
+      if (coopUI.isHost()) {
+        coopUI.forcePomodoroMode('break');
+      } else {
+        coopUI.proposePomodoro('break');
+      }
+      return;
+    }
+    setPomoMode('break');
+  });
   btnMicroContinue.addEventListener('click', () => { setPomoMode('focus', 20 * 60); startPomodoro(); });
   btnMicroBreak.addEventListener('click', () => { setPomoMode('break'); startPomodoro(); });
 
@@ -707,13 +718,13 @@
     ? new window.CozyGarden.CoopUI({
         getOutfit: () => islandMeta.avatar.shirt,
         getAvatar: () => Object.assign({}, islandMeta.avatar),
-        onEnterRoom: (coopSceneId, members, myId) => {
+        onEnterRoom: (coopSceneId, members, myId, hostId) => {
           ensureAudioStarted();
           audio.playSceneSwitch();
-          if (scene.enterCoopScene) scene.enterCoopScene(coopSceneId, members, myId);
+          if (scene.enterCoopScene) scene.enterCoopScene(coopSceneId, members, myId, hostId);
         },
-        onUpdateMembers: (members, myId) => {
-          if (scene.updateCoopMembers) scene.updateCoopMembers(members, myId);
+        onUpdateMembers: (members, myId, hostId) => {
+          if (scene.updateCoopMembers) scene.updateCoopMembers(members, myId, hostId);
         },
         onLeaveRoom: () => {
           setScene(currentSceneId, true);
@@ -725,11 +736,23 @@
         onChatSound: () => {
           audio.playChatPop();
         },
+        onChatMessage: (senderId, text) => {
+          if (scene.showCoopChatBubble) scene.showCoopChatBubble(senderId, text);
+        },
         onVoiceSound: (type) => {
           ensureAudioStarted();
           if (type === 'join') audio.playVoiceJoin();
           else if (type === 'leave') audio.playVoiceLeave();
           else audio.playMicToggle(type === 'mute');
+        },
+        onAlertSound: () => {
+          ensureAudioStarted();
+          audio.playGentleAlert();
+        },
+        onPeerInteract: (senderId, targetId, action) => {
+          ensureAudioStarted();
+          audio.playInteract(action);
+          if (scene.triggerCoopInteraction) scene.triggerCoopInteraction(senderId, targetId, action);
         },
         onPeerMoveEmote: (senderId, pos, emote) => {
           if (scene.updatePeerTransform) scene.updatePeerTransform(senderId, pos, emote);

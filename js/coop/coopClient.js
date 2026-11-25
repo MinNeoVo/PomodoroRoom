@@ -83,11 +83,15 @@
       } else if (msg.type === 'reaction') {
         if (this.handlers.onReaction) this.handlers.onReaction(msg);
       } else if (msg.type === 'pomo_approved') {
-        if (this.handlers.onPomoApproved) this.handlers.onPomoApproved(msg.mode);
+        if (this.handlers.onPomoApproved) this.handlers.onPomoApproved(msg.mode, msg.forcedBy);
       } else if (msg.type === 'pomo_rejected') {
         if (this.handlers.onPomoRejected) this.handlers.onPomoRejected(msg.by);
       } else if (msg.type === 'peer_move_emote') {
         if (this.handlers.onPeerMoveEmote) this.handlers.onPeerMoveEmote(msg);
+      } else if (msg.type === 'room_alert') {
+        if (this.handlers.onRoomAlert) this.handlers.onRoomAlert(msg);
+      } else if (msg.type === 'peer_interact') {
+        if (this.handlers.onPeerInteract) this.handlers.onPeerInteract(msg);
       } else if (msg.type === 'voice_signal') {
         if (msg.senderId === this.clientId) return;
         if (msg.targetId && msg.targetId !== this.clientId) return;
@@ -153,6 +157,7 @@
         code: cleanCode,
         sceneId: sceneId || 'coop_library',
         level: 0,
+        hostId: this.clientId,
         members: [{ id: this.clientId, name, outfit: Number(outfit) || 0, avatar: avatar || null, seat: 0, goal: goal || '' }],
         vote: null,
       };
@@ -212,6 +217,17 @@
         if (room.members.length === 0) {
           delete rooms[code];
         } else {
+          if (room.hostId === this.clientId) {
+            const nextHost = room.members[Math.floor(Math.random() * room.members.length)];
+            room.hostId = nextHost.id;
+            if (this.channel) {
+              this.channel.postMessage({
+                type: 'system',
+                roomCode: code,
+                text: `👑 Quyền trưởng phòng đã tự động chuyển cho ${nextHost.name}!`,
+              });
+            }
+          }
           rooms[code] = room;
           if (this.channel) {
             if (me) this.channel.postMessage({ type: 'system', roomCode: code, text: `${me.name} đã rời phòng.` });
@@ -371,6 +387,83 @@
       rooms[room.code] = room;
       this._writeLocalRooms(rooms);
       this._broadcastLocal({ type: 'room_state', roomCode: room.code, room });
+    }
+
+    forcePomodoroMode(mode) {
+      if (!this.currentRoom) return;
+      if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
+        this.ws.send(JSON.stringify({ type: 'pomo_force_mode', mode }));
+        return;
+      }
+      const rooms = this._readLocalRooms();
+      const room = rooms[this.currentRoom.code];
+      if (!room || room.hostId !== this.clientId) return;
+      const me = room.members.find((m) => m.id === this.clientId);
+      room.vote = null;
+      rooms[room.code] = room;
+      this._writeLocalRooms(rooms);
+      this._broadcastLocal({ type: 'pomo_approved', roomCode: room.code, mode, forcedBy: me ? me.name : 'Trưởng phòng' });
+      this._broadcastLocal({ type: 'room_state', roomCode: room.code, room });
+    }
+
+    transferHost(targetId) {
+      if (!this.currentRoom || !targetId) return;
+      if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
+        this.ws.send(JSON.stringify({ type: 'transfer_host', targetId }));
+        return;
+      }
+      const rooms = this._readLocalRooms();
+      const room = rooms[this.currentRoom.code];
+      if (!room || room.hostId !== this.clientId) return;
+      const me = room.members.find((m) => m.id === this.clientId);
+      const target = room.members.find((m) => m.id === targetId);
+      if (!target) return;
+      room.hostId = target.id;
+      rooms[room.code] = room;
+      this._writeLocalRooms(rooms);
+      this._broadcastLocal({
+        type: 'system',
+        roomCode: room.code,
+        text: `👑 ${me ? me.name : 'Trưởng phòng'} đã nhượng quyền trưởng phòng cho ${target.name}!`,
+      });
+      this._broadcastLocal({ type: 'room_state', roomCode: room.code, room });
+    }
+
+    sendAlert(text) {
+      if (!this.currentRoom) return;
+      const cleanText = String(text || 'có chuyện muốn nói!').trim().slice(0, 80);
+      if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
+        this.ws.send(JSON.stringify({ type: 'room_alert', text: cleanText }));
+        return;
+      }
+      const me = this.currentRoom.members.find((m) => m.id === this.clientId);
+      this._broadcastLocal({
+        type: 'room_alert',
+        roomCode: this.currentRoom.code,
+        senderId: this.clientId,
+        senderName: me ? me.name : 'Bạn',
+        text: cleanText,
+      });
+    }
+
+    sendPeerInteract(targetId, action) {
+      if (!this.currentRoom || !targetId) return;
+      if (this.mode === 'ws' && this.ws && this.ws.readyState === 1) {
+        this.ws.send(JSON.stringify({ type: 'peer_interact', targetId, action }));
+        return;
+      }
+      const me = this.currentRoom.members.find((m) => m.id === this.clientId);
+      const target = this.currentRoom.members.find((m) => m.id === targetId);
+      if (!target) return;
+      this._broadcastLocal({
+        type: 'peer_interact',
+        roomCode: this.currentRoom.code,
+        senderId: this.clientId,
+        senderName: me ? me.name : 'Bạn',
+        targetId: target.id,
+        targetName: target.name,
+        action,
+      });
     }
 
     castPomodoroVote(agree) {

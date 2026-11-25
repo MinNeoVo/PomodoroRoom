@@ -235,6 +235,11 @@
     </div>
   </div>
 
+  <!-- Gentle Room Alert Banner ("Someone has something to say!") -->
+  <div id="coopAlertBanner" class="coop-alert-banner hidden" role="status">
+    <span id="coopAlertText">🔔 Thành viên có chuyện muốn nói!</span>
+  </div>
+
   <!-- Co-Working Lobby Modal (Create / Join by Code) -->
   <div id="coopModal" class="coop-modal hidden" role="dialog" aria-modal="true" aria-label="Phòng làm việc chung">
     <div class="coop-lobby-card">
@@ -300,7 +305,11 @@
       <button id="btnVoiceJoin" type="button" class="voice-btn" title="Tham gia thoại nhóm bằng Micro">🎙️ Vào thoại</button>
       <button id="btnVoiceMute" type="button" class="voice-btn hidden" title="Bật / tắt Micro">🔊 Mic</button>
       <button id="btnVoiceDeafen" type="button" class="voice-btn hidden" title="Bật / tắt loa nghe người khác">🔈 Loa</button>
+      <button id="btnCoopAlert" type="button" class="voice-btn alert-btn" title="Nhắc nhẹ cả phòng: mình có chuyện cần nói">🔔 Nhắc nói</button>
       <span id="voiceStatus" class="voice-status">Thoại: Tắt</span>
+      <select id="voiceMicSelect" class="voice-mic-select" title="Chọn thiết bị Micro (tai nghe dây, USB, mic laptop...)">
+        <option value="">🎧 Mic mặc định</option>
+      </select>
     </div>
     <ul id="coopMembersList" class="coop-members"></ul>
     <div id="coopReactionsRow" class="coop-reactions" aria-label="Phản ứng nhanh"></div>

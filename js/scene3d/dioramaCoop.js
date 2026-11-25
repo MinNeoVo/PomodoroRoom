@@ -42,8 +42,10 @@
       }
 
       this.nameplates = {}; // memberId -> THREE.Sprite
+      this.chatBubbles = {}; // memberId -> { sprite, life, maxLife }
       this.reactions3D = []; // active rising emoji sprites
       this.memberAnchors = {}; // memberId -> Vector3
+      this.lastSyncedMode = null;
     }
 
     _makeLaptop(x, y, z, rotY) {
@@ -426,9 +428,12 @@
       });
     }
 
-    syncMembers(members, myId, mainCharacter, pomoMode, breakActivity) {
+    syncMembers(members, myId, mainCharacter, pomoMode, breakActivity, hostId) {
       if (!this.activeCoopId || !this.scenes[this.activeCoopId]) return;
       const seats = this.scenes[this.activeCoopId].seats;
+      const modeChanged = this.lastSyncedMode !== pomoMode;
+      this.lastSyncedMode = pomoMode;
+      const floorY = this.activeCoopId === 'coop_beach' ? 0.38 : 0.30;
 
       // Clear old nameplates
       Object.values(this.nameplates).forEach((sp) => this.root.remove(sp));
@@ -440,23 +445,41 @@
       this.peerIdMap = {};
       members.forEach((m) => {
         const seat = seats[m.seat % seats.length];
-        const pos = m.pos || { x: seat.x, y: seat.y, z: seat.z, rotY: seat.rotY };
+        const isMe = m.id === myId;
+        const isHost = hostId && m.id === hostId;
+
+        // Preserve local player's current walked position during break mode!
+        let pos;
+        if (isMe && pomoMode === 'break' && !modeChanged) {
+          const p = mainCharacter.group.position;
+          pos = { x: p.x, y: p.y, z: p.z, rotY: mainCharacter.group.rotation.y };
+        } else if (pomoMode === 'break') {
+          pos = m.pos || { x: seat.x, y: floorY, z: seat.z, rotY: 3.7 };
+        } else {
+          pos = seat;
+        }
         this.memberAnchors[m.id] = new THREE.Vector3(pos.x, pos.y, pos.z);
 
-        const plate = this._createNameplate(m.id === myId ? `${m.name} (Bạn)` : m.name, m.id === myId);
+        const label = `${isHost ? '👑 ' : ''}${m.name}${isMe ? ' (Bạn)' : ''}`;
+        const plate = this._createNameplate(label, isMe);
         plate.position.set(pos.x, pos.y + 1.65, pos.z);
         this.root.add(plate);
         this.nameplates[m.id] = plate;
 
+        // Keep active chat bubble aligned above character
+        if (this.chatBubbles[m.id]) {
+          this.chatBubbles[m.id].sprite.position.set(pos.x, pos.y + 2.28, pos.z);
+        }
+
         const outfit = CozyGarden.OUTFITS_3D[m.outfit % CozyGarden.OUTFITS_3D.length];
-        if (m.id === myId) {
+        if (isMe) {
           if (m.avatar) mainCharacter.applyAvatar(m.avatar);
           else mainCharacter.applyOutfit(outfit);
           if (pomoMode !== 'break') {
             mainCharacter.setEmote('idle');
             mainCharacter.setPose(pomoMode, breakActivity, seat);
-          } else {
-            mainCharacter.setPose(pomoMode, breakActivity, { x: seat.x, y: seat.y, z: seat.z, rotY: 3.7 });
+          } else if (modeChanged) {
+            mainCharacter.setPose(pomoMode, breakActivity, { x: seat.x, y: floorY, z: seat.z, rotY: 3.7 });
           }
         } else if (peerIdx < this.peerChars.length) {
           const peer = this.peerChars[peerIdx++];
@@ -479,16 +502,106 @@
         if (this.nameplates[memberId]) {
           this.nameplates[memberId].position.set(pos.x, pos.y + 1.65, pos.z);
         }
+        if (this.chatBubbles[memberId]) {
+          this.chatBubbles[memberId].sprite.position.set(pos.x, pos.y + 2.28, pos.z);
+        }
         this.memberAnchors[memberId] = new THREE.Vector3(pos.x, pos.y, pos.z);
       }
       if (emote) peer.setEmote(emote);
     }
 
     updateMyNameplate(myId, pos) {
-      if (this.nameplates[myId] && pos) {
-        this.nameplates[myId].position.set(pos.x, pos.y + 1.65, pos.z);
+      if (pos) {
+        if (this.nameplates[myId]) {
+          this.nameplates[myId].position.set(pos.x, pos.y + 1.65, pos.z);
+        }
+        if (this.chatBubbles[myId]) {
+          this.chatBubbles[myId].sprite.position.set(pos.x, pos.y + 2.28, pos.z);
+        }
         this.memberAnchors[myId] = new THREE.Vector3(pos.x, pos.y, pos.z);
       }
+    }
+
+    /* ---------------- 3D Thought-Bubble Chat Overlay ---------------- */
+    spawnChatBubble(senderId, text) {
+      const anchor = this.memberAnchors[senderId];
+      if (!anchor || !text) return;
+
+      // Replace previous bubble for this member so bubbles never overlap
+      if (this.chatBubbles[senderId]) {
+        this.root.remove(this.chatBubbles[senderId].sprite);
+        delete this.chatBubbles[senderId];
+      }
+
+      const c = document.createElement('canvas');
+      c.width = 420;
+      c.height = 160;
+      const ctx = c.getContext('2d');
+
+      // Word-wrap into up to 3 lines
+      ctx.font = 'bold 24px "Segoe UI", sans-serif';
+      const words = String(text).trim().split(/\s+/);
+      const lines = [];
+      let cur = '';
+      for (const w of words) {
+        const test = cur ? `${cur} ${w}` : w;
+        if (ctx.measureText(test).width > 340 && cur) {
+          lines.push(cur);
+          cur = w;
+          if (lines.length >= 2) break;
+        } else {
+          cur = test;
+        }
+      }
+      if (cur && lines.length < 3) lines.push(cur.length > 28 ? cur.slice(0, 27) + '…' : cur);
+
+      const boxH = Math.max(66, 26 + lines.length * 30);
+      const boxY = 120 - boxH;
+
+      // Thought cloud bubble body
+      ctx.fillStyle = 'rgba(255, 252, 246, 0.96)';
+      ctx.strokeStyle = 'rgba(92, 68, 56, 0.72)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(18, boxY, 384, boxH, 26);
+      ctx.fill();
+      ctx.stroke();
+
+      // Cute trailing thought dots underneath cloud
+      ctx.beginPath();
+      ctx.arc(210, 134, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(204, 150, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Text inside thought bubble
+      ctx.fillStyle = '#2a1f1c';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      lines.forEach((line, idx) => {
+        const ly = boxY + boxH / 2 + (idx - (lines.length - 1) / 2) * 30;
+        ctx.fillText(line, 210, ly);
+      });
+
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
+      sp.scale.set(2.35, 0.9, 1);
+      sp.position.set(anchor.x, anchor.y + 2.28, anchor.z);
+      this.root.add(sp);
+      this.chatBubbles[senderId] = { sprite: sp, life: 0, maxLife: 5.5 };
+    }
+
+    triggerPeerInteraction(senderId, targetId, action, myId, mainCharacter) {
+      const senderChar = senderId === myId ? mainCharacter : this.peerIdMap && this.peerIdMap[senderId];
+      const targetChar = targetId === myId ? mainCharacter : this.peerIdMap && this.peerIdMap[targetId];
+      if (senderChar && senderChar.triggerAction) senderChar.triggerAction(action);
+      if (targetChar && targetChar.triggerAction) {
+        targetChar.triggerAction(action === 'hug' ? 'hug' : 'bonked');
+      }
+      const badge = action === 'bonk' ? '💥' : action === 'hug' ? '💖' : '✨';
+      this.spawnReaction(targetId, badge);
     }
 
     spawnReaction(senderId, emoji) {
@@ -517,6 +630,16 @@
         const leftDown = Math.floor(time * 4 + idx) % 2 === 0;
         p.update(dt, time + idx * 1.1, pomoMode, breakActivity, leftDown, !leftDown, 0);
       });
+      for (const [id, b] of Object.entries(this.chatBubbles)) {
+        b.life += dt;
+        if (b.life > b.maxLife - 0.6) {
+          b.sprite.material.opacity = Math.max(0, (b.maxLife - b.life) / 0.6);
+        }
+        if (b.life >= b.maxLife) {
+          this.root.remove(b.sprite);
+          delete this.chatBubbles[id];
+        }
+      }
       for (let i = this.reactions3D.length - 1; i >= 0; i--) {
         const r = this.reactions3D[i];
         r.life += dt;

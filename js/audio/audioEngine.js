@@ -875,6 +875,88 @@ class LofiAudioEngine {
     osc.start(now);
     osc.stop(now + 0.12);
   }
+
+  /**
+   * Gentle yet noticeable warm resonant bell when a roommate sends a "need to talk" alert.
+   */
+  playGentleAlert() {
+    this.init();
+    if (!this.isInitialized || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    // Soft warm marimba/kalimba triad (G4 -> B4 -> D5 -> G5), slightly louder than chat pop, never harsh!
+    const notes = [392.0, 493.88, 587.33, 783.99];
+    notes.forEach((freq, idx) => {
+      const t = now + idx * 0.11;
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+
+      const over = this.ctx.createOscillator();
+      over.type = 'triangle';
+      over.frequency.setValueAtTime(freq * 2, t);
+
+      const env = this.ctx.createGain();
+      env.gain.setValueAtTime(0.0001, t);
+      env.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
+
+      const oEnv = this.ctx.createGain();
+      oEnv.gain.setValueAtTime(0.0001, t);
+      oEnv.gain.exponentialRampToValueAtTime(0.035, t + 0.015);
+      oEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+
+      osc.connect(env);
+      over.connect(oEnv);
+      env.connect(this.masterGain);
+      oEnv.connect(this.masterGain);
+
+      osc.start(t);
+      over.start(t);
+      osc.stop(t + 0.9);
+      over.stop(t + 0.4);
+    });
+  }
+
+  /**
+   * Playful soft sound for member-to-member interactions (bonk / hug / poke).
+   */
+  playInteract(action) {
+    this.init();
+    if (!this.isInitialized || this.isMuted) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const env = this.ctx.createGain();
+
+    if (action === 'bonk') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(240, now);
+      osc.frequency.exponentialRampToValueAtTime(95, now + 0.13);
+      env.gain.setValueAtTime(0.0001, now);
+      env.gain.exponentialRampToValueAtTime(0.14, now + 0.012);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    } else if (action === 'hug') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(660, now + 0.16);
+      env.gain.setValueAtTime(0.0001, now);
+      env.gain.exponentialRampToValueAtTime(0.09, now + 0.02);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+    } else {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(720, now);
+      osc.frequency.exponentialRampToValueAtTime(980, now + 0.07);
+      env.gain.setValueAtTime(0.0001, now);
+      env.gain.exponentialRampToValueAtTime(0.085, now + 0.01);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+    }
+
+    osc.connect(env);
+    env.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.28);
+  }
 }
 
 window.LofiAudioEngine = LofiAudioEngine;

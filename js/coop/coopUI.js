@@ -14,7 +14,10 @@
       this.onLeaveRoom = options.onLeaveRoom;
       this.onReaction = options.onReaction;
       this.onChatSound = options.onChatSound;
+      this.onChatMessage = options.onChatMessage;
       this.onVoiceSound = options.onVoiceSound;
+      this.onAlertSound = options.onAlertSound;
+      this.onPeerInteract = options.onPeerInteract;
       this.onPeerMoveEmote = options.onPeerMoveEmote;
       this.onRoomLevelChange = options.onRoomLevelChange;
       this.onPomoApproved = options.onPomoApproved;
@@ -40,6 +43,7 @@
               this.speakingIds = set || new Set();
               this._refreshMemberSpeakingClasses();
             },
+            onDevicesChange: (mics, selectedId) => this._renderMicList(mics, selectedId),
             onError: (msg) => this._appendChat('', `⚠️ ${msg}`, true),
           })
         : null;
@@ -50,11 +54,24 @@
         onChat: (msg) => {
           this._appendChat(msg.senderName, msg.text, false);
           if (this.onChatSound) this.onChatSound();
+          if (this.onChatMessage) this.onChatMessage(msg.senderId, msg.text);
         },
         onSystem: (text) => this._appendChat('', text, true),
         onReaction: (msg) => {
           this._appendChat('', `${msg.senderName} thả ${msg.emoji} ${msg.text}`, true);
           if (this.onReaction) this.onReaction(msg.senderId, msg.emoji);
+        },
+        onRoomAlert: (msg) => {
+          const line = `🔔 ${msg.senderName} ${msg.text || 'có chuyện muốn nói!'}`;
+          this._appendChat('', line, true);
+          this._showAlertBanner(line);
+          if (this.onAlertSound) this.onAlertSound();
+          if (this.onChatMessage) this.onChatMessage(msg.senderId, `🔔 ${msg.text || 'Mình có chuyện muốn nói!'}`);
+        },
+        onPeerInteract: (msg) => {
+          const verbMap = { bonk: '👊 đấm yêu', hug: '🤗 ôm chặt', poke: '👉 chọc nhẹ' };
+          this._appendChat('', `${msg.senderName} vừa ${verbMap[msg.action] || 'tương tác'} ${msg.targetName}!`, true);
+          if (this.onPeerInteract) this.onPeerInteract(msg.senderId, msg.targetId, msg.action);
         },
         onPeerMoveEmote: (msg) => {
           if (this.onPeerMoveEmote) this.onPeerMoveEmote(msg.senderId, msg.pos, msg.emote);
@@ -62,8 +79,11 @@
         onVoiceSignal: (msg) => {
           if (this.voice) this.voice.handleSignal(msg.senderId, msg.signal);
         },
-        onPomoApproved: (mode) => {
-          this._appendChat('', '🎉 Mọi người đã đồng ý! Bắt đầu phiên Pomodoro ngay!', true);
+        onPomoApproved: (mode, forcedBy) => {
+          const msgTxt = forcedBy
+            ? `👑 Trưởng phòng ${forcedBy} đã chuyển cả phòng sang chế độ mới!`
+            : '🎉 Mọi người đã đồng ý! Bắt đầu phiên Pomodoro ngay!';
+          this._appendChat('', msgTxt, true);
           this._hideVoteBanner();
           if (this.onPomoApproved) this.onPomoApproved(mode);
         },
@@ -110,7 +130,12 @@
       this.btnVoiceJoin = document.getElementById('btnVoiceJoin');
       this.btnVoiceMute = document.getElementById('btnVoiceMute');
       this.btnVoiceDeafen = document.getElementById('btnVoiceDeafen');
+      this.btnCoopAlert = document.getElementById('btnCoopAlert');
       this.voiceStatus = document.getElementById('voiceStatus');
+      this.voiceMicSelect = document.getElementById('voiceMicSelect');
+      this.alertBanner = document.getElementById('coopAlertBanner');
+      this.alertText = document.getElementById('coopAlertText');
+      this.alertTimer = null;
 
       // Load saved nickname
       const savedName = localStorage.getItem('cozy_garden_nickname_v1');
@@ -219,6 +244,16 @@
           this._updateVoiceButtons({ active: this.voice.active, muted: this.voice.muted });
         });
       }
+      if (this.voiceMicSelect) {
+        this.voiceMicSelect.addEventListener('change', () => {
+          if (this.voice) this.voice.setDevice(this.voiceMicSelect.value);
+        });
+      }
+      if (this.btnCoopAlert) {
+        this.btnCoopAlert.addEventListener('click', () => {
+          this.client.sendAlert('có chuyện muốn nói!');
+        });
+      }
     }
 
     _getNickname() {
@@ -231,12 +266,20 @@
       return Boolean(this.activeRoom);
     }
 
+    isHost() {
+      return Boolean(this.activeRoom && this.activeRoom.hostId === this.client.clientId);
+    }
+
     needsPomodoroVote() {
       return Boolean(this.activeRoom && this.activeRoom.members && this.activeRoom.members.length >= 2);
     }
 
     proposePomodoro(mode) {
       this.client.proposePomodoro(mode);
+    }
+
+    forcePomodoroMode(mode) {
+      this.client.forcePomodoroMode(mode);
     }
 
     syncOutfit(outfitIdx) {
@@ -340,20 +383,50 @@
       this.coopLabel.textContent = `${room.code} (${room.members.length}/4)`;
       if (this.onRoomLevelChange) this.onRoomLevelChange(room.level || 0);
 
-      // Render members list (with live voice badge & speaking highlight!)
+      // Render members list (with Host 👑, live voice badge, speaking glow, interact & transfer host buttons!)
       this.membersList.innerHTML = '';
+      const amIHost = room.hostId === this.client.clientId;
       room.members.forEach((m) => {
         const li = document.createElement('li');
         li.className = 'coop-member-item';
         li.dataset.memberId = m.id;
         if (this.speakingIds.has(m.id)) li.classList.add('speaking');
         const isMe = m.id === this.client.clientId;
+        const isHost = room.hostId === m.id;
         const vIcon = m.voice && m.voice.active ? (m.voice.muted ? ' 🔇' : ' 🎙️') : '';
+
         const left = document.createElement('span');
-        left.textContent = `Ghế ${m.seat + 1} • ${m.name}${isMe ? ' (Bạn)' : ''}${vIcon}`;
+        left.textContent = `${isHost ? '👑 ' : ''}${m.name}${isMe ? ' (Bạn)' : ''}${vIcon}`;
+
         const right = document.createElement('span');
-        right.className = 'coop-member-goal';
-        right.textContent = m.goal || 'Đang tập trung';
+        if (!isMe) {
+          right.className = 'coop-member-actions';
+          [
+            { act: 'bonk', icon: '👊', title: `Đấm yêu ${m.name}` },
+            { act: 'hug', icon: '🤗', title: `Ôm ${m.name}` },
+            { act: 'poke', icon: '👉', title: `Chọc nhẹ ${m.name}` },
+          ].forEach(({ act, icon, title }) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'member-act-btn';
+            b.textContent = icon;
+            b.title = title;
+            b.addEventListener('click', () => this.client.sendPeerInteract(m.id, act));
+            right.appendChild(b);
+          });
+          if (amIHost) {
+            const crownBtn = document.createElement('button');
+            crownBtn.type = 'button';
+            crownBtn.className = 'member-act-btn';
+            crownBtn.textContent = '👑';
+            crownBtn.title = `Nhượng quyền trưởng phòng cho ${m.name}`;
+            crownBtn.addEventListener('click', () => this.client.transferHost(m.id));
+            right.appendChild(crownBtn);
+          }
+        } else {
+          right.className = 'coop-member-goal';
+          right.textContent = isHost ? 'Trưởng phòng' : (m.goal || 'Đang tập trung');
+        }
         li.append(left, right);
         this.membersList.appendChild(li);
       });
@@ -364,7 +437,7 @@
         const yesCount = room.vote.yesIds.length;
         const total = room.members.length;
         const iVoted = room.vote.yesIds.includes(this.client.clientId);
-        this.voteText.textContent = `🍅 ${room.vote.proposerName} mời bắt đầu ${modeNames[room.vote.mode] || '25p'} (${yesCount}/${total} đồng ý)`;
+        this.voteText.textContent = `🍅 ${room.vote.proposerName} mời chuyển sang ${modeNames[room.vote.mode] || '25p'} (${yesCount}/${total} đồng ý)`;
         this.btnVoteYes.disabled = iVoted;
         this.btnVoteYes.textContent = iVoted ? '✓ Đã đồng ý' : '✓ Đồng ý';
         this.voteBanner.classList.remove('hidden');
@@ -374,10 +447,37 @@
 
       if (!wasInRoom) {
         this.chatLog.innerHTML = '';
-        if (this.onEnterRoom) this.onEnterRoom(room.sceneId, room.members, this.client.clientId);
+        if (this.voice) this.voice.refreshDevices();
+        if (this.onEnterRoom) this.onEnterRoom(room.sceneId, room.members, this.client.clientId, room.hostId);
       } else if (this.onUpdateMembers) {
-        this.onUpdateMembers(room.members, this.client.clientId);
+        this.onUpdateMembers(room.members, this.client.clientId, room.hostId);
       }
+    }
+
+    _renderMicList(mics, selectedId) {
+      if (!this.voiceMicSelect) return;
+      this.voiceMicSelect.innerHTML = '';
+      const defOpt = document.createElement('option');
+      defOpt.value = '';
+      defOpt.textContent = '🎧 Mic mặc định hệ thống';
+      this.voiceMicSelect.appendChild(defOpt);
+      (mics || []).forEach((d, idx) => {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = `🎙️ ${d.label || `Micro #${idx + 1}`}`;
+        if (d.deviceId && d.deviceId === selectedId) opt.selected = true;
+        this.voiceMicSelect.appendChild(opt);
+      });
+    }
+
+    _showAlertBanner(text) {
+      if (!this.alertBanner || !this.alertText) return;
+      this.alertText.textContent = text;
+      this.alertBanner.classList.remove('hidden');
+      clearTimeout(this.alertTimer);
+      this.alertTimer = setTimeout(() => {
+        this.alertBanner.classList.add('hidden');
+      }, 5000);
     }
 
     _hideVoteBanner() {

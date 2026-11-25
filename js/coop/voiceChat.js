@@ -18,17 +18,84 @@
       this.sendSignal = options.sendSignal || (() => {});
       this.onVoiceStateChange = options.onVoiceStateChange || (() => {});
       this.onSpeakingChange = options.onSpeakingChange || (() => {});
+      this.onDevicesChange = options.onDevicesChange || (() => {});
       this.onError = options.onError || (() => {});
 
       this.active = false;
       this.muted = false;
       this.deafened = false;
+      this.selectedDeviceId = '';
       this.localStream = null;
       this.peers = new Map(); // peerId -> { pc, pendingCandidates, audioEl, analyser }
       this.localAnalyser = null;
       this.audioCtx = null;
       this.speakTimer = null;
       this.speakingIds = new Set();
+
+      if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+        navigator.mediaDevices.addEventListener('devicechange', () => {
+          this.refreshDevices();
+        });
+      }
+    }
+
+    async refreshDevices() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
+      try {
+        const list = await navigator.mediaDevices.enumerateDevices();
+        const mics = list.filter((d) => d.kind === 'audioinput');
+        this.onDevicesChange(mics, this.selectedDeviceId);
+        return mics;
+      } catch (_) {
+        return [];
+      }
+    }
+
+    async _captureMicStream(deviceId) {
+      const baseAudio = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
+      if (deviceId) baseAudio.deviceId = { ideal: deviceId };
+      try {
+        return await navigator.mediaDevices.getUserMedia({ audio: baseAudio, video: false });
+      } catch (err) {
+        // Fallback for wired headsets / 3.5mm combo jacks that reject advanced audio constraints!
+        if (err && err.name !== 'NotAllowedError') {
+          return await navigator.mediaDevices.getUserMedia({
+            audio: deviceId ? { deviceId: { ideal: deviceId } } : true,
+            video: false,
+          });
+        }
+        throw err;
+      }
+    }
+
+    async setDevice(deviceId) {
+      this.selectedDeviceId = deviceId || '';
+      if (!this.active) return;
+      try {
+        const newStream = await this._captureMicStream(this.selectedDeviceId);
+        const newTrack = newStream.getAudioTracks()[0];
+        if (!newTrack) return;
+        newTrack.enabled = !this.muted;
+
+        // Hot-swap mic track across all active WebRTC peer connections!
+        for (const entry of this.peers.values()) {
+          const sender = entry.pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+          if (sender) await sender.replaceTrack(newTrack);
+        }
+
+        if (this.localStream) {
+          this.localStream.getTracks().forEach((t) => t.stop());
+        }
+        this.localStream = newStream;
+        this._setupLocalAnalyser();
+        await this.refreshDevices();
+      } catch (_) {
+        this.onError('Không thể chuyển sang thiết bị Micro đã chọn.');
+      }
     }
 
     async join() {
@@ -38,27 +105,26 @@
         return false;
       }
       try {
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-          video: false,
-        });
+        this.localStream = await this._captureMicStream(this.selectedDeviceId);
       } catch (err) {
         const msg =
           err && err.name === 'NotAllowedError'
             ? 'Bạn chưa cấp quyền Micro trên trình duyệt.'
-            : 'Không thể bật Micro (hãy kiểm tra thiết bị hoặc mở qua localhost/HTTPS).';
+            : 'Không thể bật Micro (hãy kiểm tra thiết bị tai nghe hoặc mở qua localhost/HTTPS).';
         this.onError(msg);
         return false;
+      }
+
+      const activeTrack = this.localStream.getAudioTracks()[0];
+      if (activeTrack && activeTrack.getSettings && activeTrack.getSettings().deviceId) {
+        this.selectedDeviceId = activeTrack.getSettings().deviceId;
       }
 
       this.active = true;
       this.muted = false;
       this._setupLocalAnalyser();
       this._startSpeakingMonitor();
+      await this.refreshDevices();
       this.onVoiceStateChange({ active: true, muted: false });
       this.sendSignal(null, { kind: 'join' });
       return true;
