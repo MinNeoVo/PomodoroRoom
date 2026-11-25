@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: cozy-garden-adhd
+    runtime: node
+    plan: free
+    buildCommand: ""
+    startCommand: node server/coworkServer.js
+    autoDeploy: true

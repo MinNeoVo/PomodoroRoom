@@ -1,0 +1,12 @@
+{
+  "name": "cozy-garden-adhd",
+  "version": "1.0.0",
+  "description": "Cozy 3D Anime Focus & Co-Working Space with Pomodoro, WebSocket Rooms & WebRTC Voice Chat",
+  "main": "server/coworkServer.js",
+  "scripts": {
+    "start": "node server/coworkServer.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

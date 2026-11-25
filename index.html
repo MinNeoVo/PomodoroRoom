@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cozy Lofi Garden — Không gian tập trung cho ADHD</title>
+  <link rel="stylesheet" href="styles/main.css" />
+  <link rel="stylesheet" href="styles/themes.css" />
+  <link rel="stylesheet" href="styles/coop.css" />
+</head>
+<body>
+  <!-- Main 3D Isometric Garden Canvas -->
+  <main class="stage" aria-label="Khu vườn 3D thư giãn">
+    <canvas id="roomCanvas" width="640" height="360"></canvas>
+    <div id="hoverTooltip" class="pixel-tooltip" aria-hidden="true"></div>
+  </main>
+
+  <!-- Always-Readable Floating Top-Center Pomodoro Clock (never occluded by 3D objects) -->
+  <button id="skyClockPill" class="sky-clock-pill" title="Click để Bắt đầu / Tạm dừng Pomodoro" aria-label="Đồng hồ Pomodoro">
+    <span class="sky-clock-dot"></span>
+    <span id="skyClockMode" class="sky-clock-mode">TẬP TRUNG</span>
+    <span id="skyClockTime" class="sky-clock-time">25:00</span>
+  </button>
+
+  <!-- Subtle first-interaction audio prompt -->
+  <div id="audioBanner" class="audio-banner" role="button" tabindex="0" style="top: 66px;">
+    <span class="dot-pulse"></span>
+    <span>Nhấn vào bất kỳ đâu hoặc bật âm thanh để khởi động không gian Lofi</span>
+  </div>
+
+  <!-- Top-Right Quick Controls (Always accessible, minimal in Zen Mode) -->
+  <header class="top-controls">
+    <button id="btnCoopMode" class="pixel-btn primary" title="Làm việc chung 2–4 người theo mã phòng" aria-label="Phòng làm việc chung">
+      <span>👥</span>
+      <span class="btn-label" id="coopLabel">Làm chung</span>
+    </button>
+    <button id="btnIslandPanel" class="pixel-btn" title="Tùy biến nhân vật, thú cưng & mốc phần thưởng" aria-label="Tùy biến không gian">
+      <span>🌱</span>
+      <span class="btn-label" id="islandLevelLabel">Lv.0</span>
+    </button>
+    <button id="btnWeatherToggle" class="pixel-btn" title="Đổi thời tiết (Quang đãng / Mưa nhẹ / Mưa lớn)" aria-label="Đổi thời tiết">
+      <span id="weatherIcon">🌤️</span>
+      <span class="btn-label" id="weatherBtnLabel">Quang đãng</span>
+    </button>
+    <button id="btnEcoMode" class="pixel-btn" title="Chế độ nhẹ máy: tắt bóng đổ & kính mờ giúp tiết kiệm GPU khi dùng 2 màn hình" aria-label="Chế độ tiết kiệm GPU">
+      <span>🍃</span>
+      <span class="btn-label" id="ecoLabel">Nhẹ máy</span>
+    </button>
+    <button id="btnAudioToggle" class="pixel-btn" title="Bật/Tắt âm thanh (M)" aria-label="Bật hoặc tắt âm thanh">
+      <span id="audioIcon">🔇</span>
+      <span class="btn-label" id="audioLabel">Âm thanh</span>
+    </button>
+    <button id="btnZenMode" class="pixel-btn" title="Ẩn toàn bộ công cụ (Z)" aria-label="Chế độ Zen Mode">
+      <span>✦</span>
+      <span class="btn-label" id="zenLabel">Zen Mode</span>
+    </button>
+    <button id="btnGuide" class="pixel-btn" title="Hướng dẫn sử dụng chế độ cá nhân & phòng học chung" aria-label="Hướng dẫn sử dụng">
+      <span>❓</span>
+      <span class="btn-label">Hướng dẫn</span>
+    </button>
+  </header>
+
+  <!-- Bottom-Left Solo Scene Switcher (Auto-hidden in Co-Working & Zen Mode) -->
+  <nav class="scene-switcher" aria-label="Chuyển bối cảnh không gian">
+    <button class="scene-btn active" data-scene="sakura" title="Vườn hoa anh đào (Phím 1)">
+      <span>🌸</span>
+      <span class="scene-label">Anh đào</span>
+    </button>
+    <button class="scene-btn" data-scene="room" title="Góc phòng ấm áp (Phím 2)">
+      <span>🛏️</span>
+      <span class="scene-label">Góc phòng</span>
+    </button>
+    <button class="scene-btn" data-scene="cafe" title="Góc tiệm cà phê (Phím 3)">
+      <span>☕</span>
+      <span class="scene-label">Tiệm cà phê</span>
+    </button>
+  </nav>
+
+  <!-- Floating HUD Layer (Hidden smoothly in Zen Mode) -->
+  <aside id="hudLayer" class="hud-layer" aria-label="Công cụ hỗ trợ tập trung ADHD">
+
+    <!-- Top-Left: Pomodoro Timer + Weather / Room status -->
+    <section class="hud-column hud-left">
+      <div id="pomodoroCard" class="hud-card">
+        <div class="card-header">
+          <span class="card-title">⏱ POMODORO</span>
+          <div class="pomo-modes">
+            <button id="btnModeMicro" class="chip" data-mode="micro" title="Khởi động nhẹ 5 phút chống trì hoãn">5p Bắt đầu</button>
+            <button id="btnModeFocus" class="chip active" data-mode="focus">25p Làm</button>
+            <button id="btnModeBreak" class="chip" data-mode="break">5p Nghỉ</button>
+          </div>
+        </div>
+        <div class="pomo-display">
+          <div id="pomoTime" class="pomo-time">25:00</div>
+          <div class="pomo-progress-track">
+            <div id="pomoProgress" class="pomo-progress-fill"></div>
+          </div>
+        </div>
+        <div class="pomo-actions">
+          <button id="btnPomoStart" class="pixel-btn primary">Bắt đầu</button>
+          <button id="btnPomoReset" class="pixel-btn">Đặt lại</button>
+        </div>
+        <div id="microPrompt" class="micro-prompt hidden">
+          <p>Bạn đã vào guồng rồi! Tiếp tục thêm 20p nhé?</p>
+          <div class="micro-prompt-actions">
+            <button id="btnMicroContinue" class="pixel-btn primary small">+20p Tiếp</button>
+            <button id="btnMicroBreak" class="pixel-btn small">5p Nghỉ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sound Mixer -->
+      <div class="hud-card mixer-card">
+        <div class="card-header">
+          <span class="card-title">🎚 ÂM THANH</span>
+          <span id="weatherBadge" class="status-badge">Đêm sao</span>
+        </div>
+
+        <label class="slider-row" for="volRain">
+          <span class="slider-label">🌧 Mưa / Brown</span>
+          <input id="volRain" type="range" min="0" max="100" value="45" />
+          <span id="valRain" class="slider-val">45%</span>
+        </label>
+
+        <label class="slider-row" for="volKeys">
+          <span class="slider-label">⌨ Phím cơ</span>
+          <input id="volKeys" type="range" min="0" max="100" value="35" />
+          <span id="valKeys" class="slider-val">35%</span>
+        </label>
+
+        <label class="slider-row" for="volCozy">
+          <span class="slider-label">🔥 Lửa / Mèo</span>
+          <input id="volCozy" type="range" min="0" max="100" value="40" />
+          <span id="valCozy" class="slider-val">40%</span>
+        </label>
+
+        <label class="slider-row" for="volLofi">
+          <span class="slider-label">🎹 Nhạc Lofi</span>
+          <input id="volLofi" type="range" min="0" max="100" value="35" />
+          <span id="valLofi" class="slider-val">35%</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Bottom-Right: Top 3 Tasks + Brain Dump -->
+    <section class="hud-column hud-right">
+      <!-- Top 3 Tasks -->
+      <div class="hud-card tasks-card">
+        <div class="card-header">
+          <span class="card-title">✓ TOP 3 VIỆC QUAN TRỌNG</span>
+          <span id="taskCounter" class="status-badge">0 / 3</span>
+        </div>
+        <ul id="taskList" class="task-list" aria-live="polite"></ul>
+        <form id="taskForm" class="task-form" autocomplete="off">
+          <input
+            id="taskInput"
+            type="text"
+            maxlength="70"
+            placeholder="Thêm việc quan trọng (tối đa 3)..."
+            aria-label="Nhập công việc quan trọng"
+          />
+          <button type="submit" class="pixel-btn primary small">+</button>
+        </form>
+        <p id="taskLimitNote" class="limit-note hidden">
+          Đã đủ 3 mục tiêu — tập trung từng bước nhỏ nhé.
+        </p>
+      </div>
+
+      <!-- Brain Dump -->
+      <div class="hud-card dump-card">
+        <div class="card-header">
+          <span class="card-title">💭 BRAIN DUMP</span>
+          <div class="dump-meta">
+            <span id="dumpStatus" class="dump-status">Tự lưu</span>
+            <button id="btnClearDump" class="text-btn" title="Xóa ghi chú">Xóa</button>
+          </div>
+        </div>
+        <textarea
+          id="brainDump"
+          rows="3"
+          placeholder="Xả nhanh ý tưởng chợt lóe lên để không bị xao nhãng..."
+          aria-label="Ghi chú nhanh Brain Dump"
+        ></textarea>
+      </div>
+    </section>
+  </aside>
+
+  <!-- Island Growth & Customization Popover -->
+  <section id="islandPanel" class="island-panel hidden" aria-label="Tùy biến hòn đảo và tiến trình">
+    <div class="card-header">
+      <span class="card-title">🌱 KHÔNG GIAN CỦA BẠN</span>
+      <button id="btnCloseIslandPanel" class="text-btn" title="Đóng">✕</button>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-subtitle">🐾 Thú cưng đồng hành</div>
+      <div class="option-row" id="petOptions">
+        <button class="chip active" data-pet="cat">🐱 Mèo</button>
+        <button class="chip" data-pet="corgi">🐶 Corgi</button>
+        <button class="chip" data-pet="fox">🦊 Cáo</button>
+        <button class="chip" data-pet="duck">🦆 Vịt</button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-subtitle">👤 Nhân vật của bạn</div>
+      <button id="btnOpenCharCreator" type="button" class="pixel-btn primary" style="width: 100%;">✨ Chỉnh sửa tạo hình (Nam/Nữ, Tóc, Áo, Quần, Nón)</button>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-header-inline">
+        <span class="panel-subtitle">✨ Đảo lớn lên theo Pomodoro & Task</span>
+        <span id="islandProgressCount" class="status-badge">0 / 12</span>
+      </div>
+      <ul id="islandUnlocksList" class="unlock-list"></ul>
+      <div class="panel-footer">
+        <button id="btnResetIsland" class="text-btn">Đặt lại tiến trình đảo</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Message in a Bottle Modal -->
+  <div id="bottleModal" class="bottle-modal hidden" role="dialog" aria-modal="false" aria-label="Lời nhắn trong chai thủy tinh">
+    <div class="bottle-card">
+      <div class="bottle-header">
+        <span>🍾 LỜI NHẮN TỪ BIỂN</span>
+        <button id="btnCloseBottle" class="text-btn">✕</button>
+      </div>
+      <p id="bottleMessage" class="bottle-text"></p>
+      <div class="bottle-actions">
+        <button id="btnBottleOk" class="pixel-btn primary small">Cảm ơn biển ✨</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pomodoro Vote Banner (Co-Working Mode) -->
+  <div id="coopVoteBanner" class="coop-vote-banner hidden" role="alert">
+    <span id="coopVoteText">🍅 Thành viên mời bắt đầu Pomodoro...</span>
+    <div class="coop-vote-actions">
+      <button id="btnVoteYes" class="pixel-btn primary small">✓ Đồng ý</button>
+      <button id="btnVoteNo" class="pixel-btn small">✕ Chưa</button>
+    </div>
+  </div>
+
+  <!-- Co-Working Lobby Modal (Create / Join by Code) -->
+  <div id="coopModal" class="coop-modal hidden" role="dialog" aria-modal="true" aria-label="Phòng làm việc chung">
+    <div class="coop-lobby-card">
+      <div class="card-header">
+        <span class="card-title">👥 PHÒNG LÀM VIỆC CHUNG (2–4 NGƯỜI)</span>
+        <button id="btnCloseCoopModal" class="text-btn">✕</button>
+      </div>
+
+      <div class="coop-field">
+        <label for="coopNameInput">Tên hiển thị của bạn</label>
+        <input id="coopNameInput" class="coop-input" type="text" maxlength="18" placeholder="VD: Minh, Linh..." />
+      </div>
+
+      <div class="coop-field">
+        <label for="coopGoalInput">Mục tiêu ngắn hôm nay (tùy chọn)</label>
+        <input id="coopGoalInput" class="coop-input" type="text" maxlength="50" placeholder="VD: Viết báo cáo, Ôn bài..." />
+      </div>
+
+      <div class="coop-field">
+        <label>Chọn bối cảnh 4 chỗ ngồi & Tạo phòng mới</label>
+        <div class="coop-scene-grid">
+          <button type="button" class="coop-scene-card active" data-coop-scene="coop_library">
+            <span class="icon">📚</span>
+            <span class="title">Thư viện</span>
+          </button>
+          <button type="button" class="coop-scene-card" data-coop-scene="coop_cafe">
+            <span class="icon">☕</span>
+            <span class="title">Quán cà phê</span>
+          </button>
+          <button type="button" class="coop-scene-card" data-coop-scene="coop_beach">
+            <span class="icon">🏖️</span>
+            <span class="title">Bãi biển</span>
+          </button>
+        </div>
+        <button id="btnCoopCreate" type="button" class="pixel-btn primary" style="width: 100%;">+ Tạo phòng mới (Tạo mã Code)</button>
+      </div>
+
+      <div class="coop-field">
+        <label for="coopCodeInput">Hoặc nhập mã Code để tham gia phòng bạn bè</label>
+        <div class="coop-join-row">
+          <input id="coopCodeInput" class="coop-input" type="text" maxlength="6" placeholder="MÃ PHÒNG" />
+          <button id="btnCoopJoin" type="button" class="pixel-btn primary">Tham gia</button>
+        </div>
+        <p id="coopError" class="coop-error"></p>
+      </div>
+
+      <div class="coop-field" style="margin-bottom: 0;">
+        <label>Phòng đang mở</label>
+        <ul id="coopOpenRooms" class="coop-open-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Co-Working Room Dock (Members, Silent Reactions & Live Chat) -->
+  <section id="coopDock" class="coop-dock hidden" aria-label="Phòng làm việc chung đang tham gia">
+    <div class="coop-room-head">
+      <span id="coopRoomTitle" class="card-title">📚 Thư viện chung</span>
+      <span id="coopRoomLevelBadge" class="status-badge">Lv.0/6</span>
+      <button id="coopCodeBadge" class="coop-code-badge" title="Click để chép mã phòng">Mã: ------</button>
+      <button id="btnCoopLeave" class="text-btn" title="Rời phòng về chế độ solo">Rời</button>
+    </div>
+    <div class="coop-voice-bar" aria-label="Thoại nhóm qua Micro">
+      <button id="btnVoiceJoin" type="button" class="voice-btn" title="Tham gia thoại nhóm bằng Micro">🎙️ Vào thoại</button>
+      <button id="btnVoiceMute" type="button" class="voice-btn hidden" title="Bật / tắt Micro">🔊 Mic</button>
+      <button id="btnVoiceDeafen" type="button" class="voice-btn hidden" title="Bật / tắt loa nghe người khác">🔈 Loa</button>
+      <span id="voiceStatus" class="voice-status">Thoại: Tắt</span>
+    </div>
+    <ul id="coopMembersList" class="coop-members"></ul>
+    <div id="coopReactionsRow" class="coop-reactions" aria-label="Phản ứng nhanh"></div>
+    <div id="coopChatLog" class="coop-chat-log" aria-live="polite"></div>
+    <form id="coopChatForm" class="coop-chat-form" autocomplete="off">
+      <input id="coopChatInput" class="coop-input" type="text" maxlength="180" placeholder="Nhắn tin với mọi người..." />
+      <button type="submit" class="pixel-btn primary small">Gửi</button>
+    </form>
+  </section>
+
+  <!-- First-Visit & Anytime 3D Character Creator (Live 3D Preview!) -->
+  <div id="charCreatorModal" class="creator-modal hidden" role="dialog" aria-modal="true" aria-label="Tạo hình nhân vật 3D">
+    <div class="creator-card">
+      <div class="card-header">
+        <span class="card-title">✨ TẠO HÌNH NHÂN VẬT 3D</span>
+        <button id="btnCloseCreator" class="text-btn" title="Đóng">✕</button>
+      </div>
+      <div class="creator-preview-wrap">
+        <canvas id="creatorPreviewCanvas" width="280" height="210"></canvas>
+        <span class="creator-preview-hint">Kéo để xoay xem 360°</span>
+      </div>
+      <p class="creator-sub">Nhân vật sẽ được lưu tự động và giữ nguyên khi bạn vào phòng làm chung!</p>
+
+      <div class="coop-field">
+        <label>Giới tính</label>
+        <div class="option-row" id="creatorGender">
+          <button type="button" class="chip active" data-val="female">👩 Nữ</button>
+          <button type="button" class="chip" data-val="male">👨 Nam</button>
+        </div>
+      </div>
+
+      <div class="coop-field">
+        <label>Áo / Đồng phục (4 kiểu)</label>
+        <div class="option-row creator-grid" id="creatorShirt">
+          <button type="button" class="chip active" data-val="0">👔 Sơ mi cà vạt</button>
+          <button type="button" class="chip" data-val="1">🧥 Áo Vest</button>
+          <button type="button" class="chip" data-val="2">👕 Áo Thun</button>
+          <button type="button" class="chip" data-val="3">🧶 Áo Len</button>
+        </div>
+      </div>
+
+      <div class="coop-field">
+        <label>Quần / Váy (4 kiểu)</label>
+        <div class="option-row creator-grid" id="creatorPants">
+          <button type="button" class="chip" data-val="0">👖 Quần Tây</button>
+          <button type="button" class="chip" data-val="1">🩳 Quần Short</button>
+          <button type="button" class="chip active" data-val="2">👗 Váy Xếp Ly</button>
+          <button type="button" class="chip" data-val="3">👖 Quần Jean</button>
+        </div>
+      </div>
+
+      <div class="coop-field">
+        <label>Màu tóc (4 màu)</label>
+        <div class="option-row creator-grid" id="creatorHair">
+          <button type="button" class="chip active" data-val="0">🌿 Xanh bạc hà</button>
+          <button type="button" class="chip" data-val="1">💙 Xanh đêm</button>
+          <button type="button" class="chip" data-val="2">🤎 Nâu hạt dẻ</button>
+          <button type="button" class="chip" data-val="3">💛 Vàng mật</button>
+        </div>
+      </div>
+
+      <div class="coop-field">
+        <label>Phụ kiện / Nón (4 mẫu)</label>
+        <div class="option-row creator-grid" id="creatorHat">
+          <button type="button" class="chip active" data-val="0">👓 Kính anime</button>
+          <button type="button" class="chip" data-val="1">🎧 Tai nghe</button>
+          <button type="button" class="chip" data-val="2">🧶 Mũ len</button>
+          <button type="button" class="chip" data-val="3">🧢 Lưỡi trai</button>
+        </div>
+      </div>
+
+      <button id="btnSaveCreator" type="button" class="pixel-btn primary" style="width: 100%;">✓ Xác nhận & Bắt đầu tập trung</button>
+    </div>
+  </div>
+
+  <!-- User Guide Modal (Solo + Co-Working + Shortcuts) -->
+  <div id="guideModal" class="guide-modal hidden" role="dialog" aria-modal="true" aria-label="Hướng dẫn sử dụng Cozy Garden">
+    <div class="guide-card">
+      <div class="card-header">
+        <span class="card-title">📖 HƯỚNG DẪN SỬ DỤNG COZY GARDEN</span>
+        <button id="btnCloseGuide" class="text-btn" title="Đóng hướng dẫn">✕</button>
+      </div>
+
+      <div class="guide-tabs" role="tablist">
+        <button type="button" class="chip active" data-guide-tab="solo">🌸 Học Cá Nhân</button>
+        <button type="button" class="chip" data-guide-tab="coop">👥 Phòng Học Chung</button>
+        <button type="button" class="chip" data-guide-tab="tips">⌨️ Phím Tắt & Mẹo</button>
+      </div>
+
+      <div class="guide-body">
+        <!-- Tab 1: Solo Mode -->
+        <div class="guide-panel" data-guide-panel="solo">
+          <div class="guide-item">
+            <span class="guide-icon">⏱</span>
+            <div>
+              <strong>Đồng hồ Pomodoro chống trì hoãn</strong>
+              <p>Chọn <b>5p Bắt đầu</b> khi ngại khởi động, <b>25p Làm</b> để tập trung sâu, hoặc <b>5p Nghỉ</b>. Hết giờ sẽ có chuông ăn mừng & hiệu ứng thư giãn nhẹ nhàng.</p>
+            </div>
+          </div>
+          <div class="guide-item">
+            <span class="guide-icon">🌿</span>
+            <div>
+              <strong>Top 3 Việc & Mở khóa 12 vật phẩm (Lv.0 → Lv.12)</strong>
+              <p>Hoàn thành Pomodoro hoặc tick xong việc trong <b>Top 3 việc</b> để nâng cấp không gian. Mỗi bối cảnh (<i>Anh đào, Góc phòng, Tiệm cà phê</i>) có 12 món trang trí riêng.</p>
+            </div>
+          </div>
+          <div class="guide-item">
+            <span class="guide-icon">✨</span>
+            <div>
+              <strong>Tương tác 3D & Vật phẩm phát sáng</strong>
+              <p><b>Kéo chuột</b> để xoay góc nhìn, <b>cuộn</b> để thu phóng. Click vào <i>đèn, ly trà, thú cưng, đồng hồ</i> hoặc <i>lọ thư / nhật ký / ly cà phê phát sáng</i> để nhận lời nhắn chữa lành.</p>
+            </div>
+          </div>
+          <div class="guide-item">
+            <span class="guide-icon">💃</span>
+            <div>
+              <strong>Di chuyển & Hành động trong giờ nghỉ 5 phút</strong>
+              <p>Khi vào <b>5p Nghỉ</b>, bạn có thể <b>nhấn lên sàn</b> để nhân vật chibi đi lại tự do và chọn 4 hành động: <i>👋 Chào, 😊 Cười, 💃 Múa may, ☕ Cà phê</i>.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Co-Working Mode -->
+        <div class="guide-panel hidden" data-guide-panel="coop">
+          <div class="guide-item">
+            <span class="guide-icon">🏠</span>
+            <div>
+              <strong>Tạo phòng hoặc tham gia bằng mã Code (2–4 người)</strong>
+              <p>Bấm nút <b>👥 Làm chung</b> ở góc trên phải → chọn bối cảnh 4 chỗ ngồi (<i>Thư viện, Quán cà phê, Bãi biển</i>) → bấm <b>Tạo phòng mới</b> rồi gửi <b>Mã 6 ký tự</b> cho bạn bè nhập vào.</p>
+            </div>
+          </div>
+          <div class="guide-item">
+            <span class="guide-icon">🍅</span>
+            <div>
+              <strong>Biểu quyết Pomodoro đồng bộ cả phòng</strong>
+              <p>Khi phòng có từ 2 người trở lên, bấm Bắt đầu Pomodoro sẽ hiện bảng mời cả nhóm cùng <b>✓ Đồng ý</b> để đồng hồ đếm ngược chạy đồng bộ mọi màn hình.</p>
+            </div>
+          </div>
+          <div class="guide-item">
+            <span class="guide-icon">🏆</span>
+            <div>
+              <strong>Lên cấp phòng chung (Lv.0 → Lv.6)</strong>
+              <p>Phòng chung tự nâng cấp và mở thêm đèn/cây/trang trí khi cả nhóm <b>hoàn tất phiên Pomodoro</b>. Danh sách Top 3 việc cá nhân được giữ riêng tư, không làm thay đổi cấp phòng chung.</p>
+            </div>
+          </div>
+          <div class="guide-item">
+            <span class="guide-icon">💬</span>
+            <div>
+              <strong>Chat, Call Mic thoại nhóm & Giao lưu giờ nghỉ</strong>
+              <p>Bấm <b>🎙️ Vào thoại</b> (cần mở qua <code>localhost:3000</code> hoặc HTTPS) để gọi mic cùng cả phòng, kèm nút tắt Mic/Loa. Nhắn tin bên phải, thả emoji 3D, và vào 5p nghỉ có thể <b>click sàn đi lại</b> thấy nhau trực tiếp!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Shortcuts & Performance Tips -->
+        <div class="guide-panel hidden" data-guide-panel="tips">
+          <div class="guide-item">
+            <span class="guide-icon">🎨</span>
+            <div>
+              <strong>Tùy biến nhân vật Chibi 3D</strong>
+              <p>Bấm <b>🌱 Lv → ✨ Tạo / Đổi nhân vật 3D</b> để chọn Nam/Nữ, 4 kiểu áo đồng phục, 4 kiểu quần/váy, màu tóc và phụ kiện. Nhân vật được lưu tự động và dùng chung cho cả phòng nhóm.</p>
+            </div>
+          </div>
+          <div class="guide-item">
+            <span class="guide-icon">🍃</span>
+            <div>
+              <strong>Mẹo dùng 2 màn hình không lag</strong>
+              <p>Web tự giảm FPS khi bạn bấm sang màn hình chính làm việc. Nếu cần mở app nặng song song, hãy bật thêm nút <b>🍃 Nhẹ máy</b> ở góc phải để giảm tối đa tải GPU.</p>
+            </div>
+          </div>
+          <div class="guide-item">
+            <span class="guide-icon">⌨️</span>
+            <div>
+              <strong>Phím tắt nhanh</strong>
+              <p><code>1</code> / <code>2</code> / <code>3</code>: Đổi nhanh 3 bối cảnh cá nhân • <code>Z</code>: Bật/tắt <b>Zen Mode</b> ẩn HUD • <code>M</code>: Bật/tắt âm thanh • <code>Esc</code>: Thoát Zen Mode hoặc đóng bảng.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button id="btnGuideGotIt" type="button" class="pixel-btn primary" style="width: 100%;">✓ Đã hiểu, bắt đầu ngay!</button>
+    </div>
+  </div>
+
+  <!-- Break Mode Action Bar (Click-to-move on floor + 4 Emotes) -->
+  <div id="breakActionBar" class="break-bar hidden" aria-label="Điều khiển nhân vật trong giờ nghỉ">
+    <span class="break-dpad" style="font-size: 11px; color: var(--accent-mint);">🖱️ Nhấn lên sàn để đi</span>
+    <button type="button" class="break-btn" data-emote="wave">👋 Chào</button>
+    <button type="button" class="break-btn" data-emote="laugh">😊 Cười</button>
+    <button type="button" class="break-btn" data-emote="dance">💃 Múa may</button>
+    <button type="button" class="break-btn" data-emote="coffee">☕ Cà phê</button>
+  </div>
+
+  <!-- Subtle bottom-left interaction hints -->
+  <footer id="roomHint" class="room-hint">
+    <strong>Kéo chuột</strong> xoay 3D • <strong>Cuộn</strong> thu phóng • Click <strong>Nhân vật</strong>, <strong>Ly trà</strong>, <strong>Đèn</strong>, <strong>Thú cưng</strong>, <strong>Vật phẩm sáng</strong> hoặc <strong>Đồng hồ</strong>
+  </footer>
+
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="js/config/constants.js"></script>
+  <script src="js/audio/audioEngine.js"></script>
+  <script src="js/fallback/scene2d.js"></script>
+  <script src="js/scene3d/gardenWorld.js"></script>
+  <script src="js/scene3d/progression3d.js"></script>
+  <script src="js/scene3d/dioramaRoom.js"></script>
+  <script src="js/scene3d/dioramaCafe.js"></script>
+  <script src="js/scene3d/dioramaCoop.js"></script>
+  <script src="js/scene3d/character3d.js"></script>
+  <script src="js/scene3d/avatarPreview.js"></script>
+  <script src="js/scene3d/pets3d.js"></script>
+  <script src="js/scene3d/bottle3d.js"></script>
+  <script src="js/scene3d/sceneManager.js"></script>
+  <script src="js/coop/coopClient.js"></script>
+  <script src="js/coop/voiceChat.js"></script>
+  <script src="js/coop/coopUI.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

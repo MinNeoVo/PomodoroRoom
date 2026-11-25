@@ -1,0 +1,590 @@
+/* ==========================================================================
+   Cozy Garden — Co-Working Multiplayer UI Styles (styles/coop.css)
+   Lobby Modal, Active Room Chat Dock, Quick Reactions & Pomodoro Vote Banner
+   ========================================================================== */
+
+.coop-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(14, 10, 14, 0.55);
+  backdrop-filter: blur(5px);
+  transition: opacity 0.22s ease;
+}
+
+.coop-modal.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.coop-lobby-card {
+  width: 440px;
+  max-width: calc(100vw - 28px);
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  background: rgba(28, 22, 22, 0.94);
+  border: 1px solid var(--border-warm);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  padding: 16px;
+}
+
+.coop-field {
+  margin-bottom: 12px;
+}
+
+.coop-field label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 5px;
+}
+
+.coop-input {
+  width: 100%;
+  padding: 7px 10px;
+  background: rgba(16, 13, 14, 0.78);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  user-select: text;
+}
+
+.coop-input:focus {
+  border-color: var(--accent-warm);
+}
+
+.coop-scene-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.coop-scene-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 10px 6px;
+  background: rgba(18, 14, 16, 0.65);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.coop-scene-card:hover {
+  border-color: var(--border-warm);
+}
+
+.coop-scene-card.active {
+  background: rgba(245, 185, 113, 0.16);
+  border-color: var(--accent-gold);
+}
+
+.coop-scene-card .icon {
+  font-size: 20px;
+}
+
+.coop-scene-card .title {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.coop-join-row {
+  display: flex;
+  gap: 6px;
+}
+
+.coop-join-row .coop-input {
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+.coop-open-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.coop-open-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 9px;
+  background: rgba(16, 13, 14, 0.65);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.coop-error {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--danger-soft);
+}
+
+/* ==========================================================================
+   Active Co-Working Room Dock (Bottom-Left)
+   ========================================================================== */
+.coop-dock {
+  position: fixed;
+  left: 16px;
+  bottom: 46px;
+  z-index: 18;
+  width: 268px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-warm);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4);
+  padding: 10px 11px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.coop-dock.hidden,
+body.zen-mode .coop-dock {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+}
+
+.coop-room-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.coop-code-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--accent-gold);
+  background: rgba(255, 224, 173, 0.14);
+  border: 1px solid rgba(255, 224, 173, 0.38);
+  border-radius: 8px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.coop-members {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.coop-member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  padding: 3px 6px;
+  background: rgba(16, 13, 14, 0.5);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.coop-member-item.speaking {
+  border-color: var(--accent-mint);
+  box-shadow: 0 0 8px rgba(168, 230, 207, 0.4);
+  background: rgba(168, 230, 207, 0.12);
+}
+
+.coop-voice-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 5px 6px;
+  background: rgba(16, 13, 14, 0.48);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.voice-btn {
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-main);
+  background: rgba(46, 36, 36, 0.85);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.voice-btn:hover {
+  border-color: var(--accent-gold);
+}
+
+.voice-btn.active {
+  background: rgba(168, 230, 207, 0.22);
+  border-color: var(--accent-mint);
+  color: #ffffff;
+}
+
+.voice-btn.muted {
+  background: rgba(247, 118, 142, 0.2);
+  border-color: #f7768e;
+  color: #ffd6de;
+}
+
+.voice-btn.hidden {
+  display: none;
+}
+
+.voice-status {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.coop-member-goal {
+  font-size: 10px;
+  color: var(--text-dim);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coop-reactions {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.coop-react-btn {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 13px;
+  background: rgba(16, 13, 14, 0.55);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.15s ease;
+}
+
+.coop-react-btn:hover {
+  border-color: var(--accent-gold);
+  transform: translateY(-1px);
+}
+
+.coop-chat-log {
+  height: 104px;
+  overflow-y: auto;
+  padding: 6px;
+  background: rgba(14, 11, 12, 0.58);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  user-select: text;
+}
+
+.chat-msg .sender {
+  font-weight: 700;
+  color: var(--accent-gold);
+  margin-right: 4px;
+}
+
+.chat-msg.system {
+  color: var(--accent-mint);
+  font-style: italic;
+  font-size: 10px;
+}
+
+.coop-chat-form {
+  display: flex;
+  gap: 5px;
+}
+
+/* ==========================================================================
+   Pomodoro Vote Banner (Top-Center below Clock Pill)
+   ========================================================================== */
+.coop-vote-banner {
+  position: fixed;
+  top: 66px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 32;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(28, 22, 22, 0.94);
+  border: 1px solid var(--accent-gold);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.52);
+  font-size: 12px;
+  color: #fffaf3;
+}
+
+.coop-vote-banner.hidden {
+  display: none;
+}
+
+/* Hide Solo Scene Switcher while inside a Co-Working Room */
+body.in-coop .scene-switcher {
+  display: none;
+}
+
+/* ==========================================================================
+   Break Mode Action & Movement Bar (Bottom-Center, visible only in 5m Break)
+   ========================================================================== */
+.break-bar {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 26;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: rgba(24, 18, 18, 0.82);
+  border: 1px solid var(--accent-mint);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.break-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 10px);
+}
+
+.break-dpad {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-right: 8px;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.break-btn {
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-main);
+  background: rgba(42, 34, 34, 0.85);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.break-btn:hover,
+.break-btn.active {
+  border-color: var(--accent-mint);
+  background: rgba(168, 230, 207, 0.18);
+  color: #ffffff;
+}
+
+.coop-vote-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ==========================================================================
+   3D Character Creator Modal (Right-aligned so live 3D preview stays visible!)
+   ========================================================================== */
+.creator-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 20px;
+  background: rgba(14, 10, 14, 0.25);
+  transition: opacity 0.22s ease;
+}
+
+.creator-modal.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.creator-card {
+  width: 340px;
+  max-width: calc(100vw - 28px);
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  background: rgba(26, 20, 20, 0.94);
+  border: 1px solid var(--accent-gold);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+  padding: 16px;
+}
+
+.creator-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.creator-preview-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 45%, rgba(255, 224, 185, 0.16) 0%, rgba(16, 12, 16, 0.72) 100%);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+#creatorPreviewCanvas {
+  width: 100%;
+  height: 190px;
+  display: block;
+  cursor: grab;
+}
+
+.creator-preview-hint {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  font-size: 10px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.creator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* ==========================================================================
+   User Guide Modal (Solo + Co-Working + Shortcuts)
+   ========================================================================== */
+.guide-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 46;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(14, 10, 14, 0.52);
+  transition: opacity 0.22s ease;
+}
+
+.guide-modal.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.guide-card {
+  width: 520px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  background: rgba(26, 20, 20, 0.94);
+  border: 1px solid var(--accent-warm);
+  border-radius: 16px;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(12px);
+  padding: 16px 18px;
+}
+
+.guide-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.guide-tabs .chip {
+  flex: 1;
+  text-align: center;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.guide-body {
+  margin-bottom: 14px;
+}
+
+.guide-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guide-panel.hidden {
+  display: none;
+}
+
+.guide-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: rgba(255, 244, 232, 0.06);
+  border: 1px solid rgba(255, 238, 224, 0.12);
+}
+
+.guide-icon {
+  font-size: 18px;
+  line-height: 1.2;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.guide-item strong {
+  display: block;
+  font-size: 12.5px;
+  color: var(--accent-gold);
+  margin-bottom: 3px;
+}
+
+.guide-item p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.48;
+  color: var(--text-main);
+}
+
+.guide-item code {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--accent-mint);
+  font-family: Consolas, monospace;
+  font-size: 11px;
+}

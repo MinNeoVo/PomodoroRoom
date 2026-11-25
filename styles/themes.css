@@ -1,0 +1,62 @@
+/* ==========================================================================
+   Cozy Garden — Warm Anime Frosted-Glass Theme (styles/themes.css)
+   ========================================================================== */
+
+body {
+  --bg-panel: rgba(34, 26, 24, 0.56);
+  --bg-panel-hover: rgba(46, 34, 30, 0.72);
+  --border-subtle: rgba(255, 238, 224, 0.28);
+  --border-warm: rgba(255, 206, 158, 0.58);
+  --accent-warm: #f5b971;
+  --accent-gold: #ffe0ad;
+  --accent-mint: #a8e6cf;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+#roomCanvas {
+  image-rendering: auto;
+}
+
+.hud-card,
+.pixel-btn,
+.scene-switcher,
+.island-panel,
+.bottle-card,
+.room-hint,
+.pixel-tooltip,
+.sky-clock-pill {
+  border-radius: 14px;
+}
+
+.chip,
+.scene-btn,
+.task-item,
+#brainDump,
+.task-form input[type='text'] {
+  border-radius: 8px;
+}
+
+/* Eco Mode: removes expensive DWM backdrop-filter glass blur & canvas CSS filter for dual-monitor smoothness */
+body.eco-mode {
+  --bg-panel: rgba(30, 23, 21, 0.88);
+  --bg-panel-hover: rgba(44, 33, 29, 0.94);
+}
+body.eco-mode #roomCanvas {
+  filter: none;
+}
+body.eco-mode .hud-card,
+body.eco-mode .pixel-btn,
+body.eco-mode .scene-switcher,
+body.eco-mode .island-panel,
+body.eco-mode .bottle-card,
+body.eco-mode .room-hint,
+body.eco-mode .pixel-tooltip,
+body.eco-mode .sky-clock-pill,
+body.eco-mode .coop-dock,
+body.eco-mode .coop-lobby-card,
+body.eco-mode .creator-card,
+body.eco-mode .guide-card,
+body.eco-mode .break-bar {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
